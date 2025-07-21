@@ -27,6 +27,9 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <setjmp.h>
+
+#include "modern.h"
+
 #define DIGIT isdigit(*Lp)
 #define LETTER isalpha(*Lp)
 #define LETNUM isalnum(*Lp)
@@ -146,8 +149,6 @@
 #define ISKEY 20
 
 #define MKDOUBLE(x) if((x)->t!=DOUBLE)mkdouble(x)
-#define DBLSIZE	sizeof (double)
-#define INTSIZE	sizeof (int)
 #define INTBITS (INTSIZE*8-2)
 
 char *Resnames[] = {
@@ -179,7 +180,6 @@ short Fargct[] = {
 	3, 1, 2, 1, 2, 1, -2,
 	2, 2, 0, 2
 };
-double intpow();
 char Fcode[] = {
 	ARG, NARG, RAND, EVAL, FORMAT, LAST,
 	SUBSTR, INDEX, TRANSLATE, SIZE,
@@ -193,38 +193,10 @@ double (*Libcode[])() = {
 	atan, ceil, cos, exp, fabs, floor, log, sin, sqrt
 };
 
-union value {
-	double	d;
-	char	*sp;
-	struct {
-		FILE	*file;
-		char	ffunc, f_or_p;
-	} io;
-	char	ch[DBLSIZE];
-	int	intg[DBLSIZE/INTSIZE];
-	struct {
-		struct names	*head,
-				*lastref;
-	} ar_hdr;
-	int	*htabl; /* really a `struct htab' */
-};
-struct names {
-	union value v;
-	char	t,
-		set;
-	union {
-		char	sname[6];
-		struct {
-			int	subscr; /* stored as a complement */
-			struct	names *next;
-		} ar;
-	} u;
-} *Np[NAMEGRPS];
-struct estack {
-	union value v;
-	char	t,
-		set;
-} Estack[E_STACK];
+names_t *Np[NAMEGRPS];
+
+estack_t Estack[E_STACK];
+
 struct htitem {
 	char *ht_key;
 	struct estack ht_v;
@@ -284,12 +256,7 @@ short	Iskey;
 char	*Temps[STRTEMPS];
 int	Ti = -1;
 long	Time;
-double	mkdouble();
-char	*to_str(), *salloc(), *substr(), *trans();
-struct estack *execute();
-double	atof();
 extern char	*Atof;
-struct names 	*getar(), *lookup(), *nextname();
 int	Argc;
 char	**Argv;
 struct 	stat Statb;
@@ -307,7 +274,7 @@ union gen {
 	struct htitem *ht;
 };
 
-void intr(void)
+void intr(int num)
 {
 	putchar('\n');
 	(void)signal(SIGINT, intr);
@@ -338,20 +305,41 @@ void setup(void)
 	longjmp(Reset, 1);
 }
 
-void fpe(void)
+void prtrace(struct fstack *fs)
+{
+	struct estack *estack;
+	int i;
+
+	printf("%d: ", (int)(fs - Fstack));
+	printf("%.6s(", Label[fs->fname].l_name);
+	estack = fs->estk;
+	for(i = 0; i < fs->callargs; ++i) {
+		if(i)
+			fputs(", ", stdout);
+		printf("%.20s", to_str(estack+i));
+	}
+	fputs(") ", stdout);
+	for(i = fs->dclargs; i < fs->tot_var; ++i) {
+		if(i > fs->dclargs)
+			fputs(", ", stdout);
+		printf("%.20s", to_str(estack+i));
+	}
+	fputs("\n", stdout);
+}
+
+void fpe(int num)
 {
 	error("Floating exception");
 }
 
-void sigpipe(void)
+void sigpipe(int num)
 {
 	error(Gio ? "Bad graph output" : "Pipe closed");
 }
 
-int
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
-	register int lc;
+	int lc;
 
 	(void)setjmp(Remain);
 	Ip = Instr;
@@ -447,7 +435,7 @@ void statement(void)
 
 void singstat(void )
 {
-	register * saveip = Ip;
+	register int* saveip = Ip;
 	register int v;
 	register struct estack *ep;
 
@@ -482,8 +470,8 @@ void singstat(void )
 
 void fexec(char * s)
 {
-	register v;
-	static sts;
+	register int v;
+	static int sts;
 
 	if((v = fork()) == 0) { /* child */
 		(void)signal(SIGINT, SIG_DFL);
@@ -502,9 +490,9 @@ int comp(void)
 {
 	int ns;
 	char *savelp;
-	static *savefun;
+	static int *savefun;
 	static struct { int tp, *loc; } s[20];
-	register i;
+	register int i;
 	register union gen save1, save2, save3;
 	char tname[20];
 
@@ -692,7 +680,7 @@ funerr:			cerror("Func def.");
 		op(FUNCDEF); savefun = Ip++; save1.ip = Ip; Ip += 2;
 		SKIP;
 		i = Lnames = 0;
-		if(!*Lp++ == '(') goto funerr;
+		if(*Lp++ != '(') goto funerr; /* pdxjjb 2025 */
 		while(aname(tname)) {
 			strncpy(Locname[Lnames++], tname, 6);
 			++i;
@@ -726,9 +714,9 @@ funerr:			cerror("Func def.");
 		if(aname(tname)) {
 			savelp = salloc(sizeof tname + 2, ALLOC);
 			strcpy(savelp, tname);
-			push(savelp);
+			push((int)savelp);
 		} else
-			push((char *)0);
+			push(0);
 		break;
 	case ONINTR:
 		i = aname(tname)? cklabel(tname, (int *)0): ALLOC;
@@ -738,7 +726,7 @@ funerr:			cerror("Func def.");
 	case RUN:
 		push(0);
 		if(Cerrs)
-			Cerrs = 0, intr();
+			Cerrs = 0, intr(SIGINT);
 		srand((unsigned)(Time >> 16));
 		(void)execute(Instr, Estack);
 			if(Graphout) {
@@ -792,9 +780,10 @@ funerr:			cerror("Func def.");
 
 int expr(int a)
 {
-	register int *saveip = Ip;
-	register int namei, int subs;
-	register int saveop;
+	int *saveip = Ip;
+	int namei;
+    int subs;
+	int saveop;
 
 	e1(a);
 	if(*Lp == '=') {
@@ -861,7 +850,7 @@ more:
 		++i;
 		e4(1);
 		op(opr);
-		if(opr = e3a()) {
+		if((opr = e3a())) {
 			op(EXTR);
 			goto more;
 		}
@@ -870,7 +859,7 @@ more:
 			op(AND);
 	}
 }
-void e3a(void)
+int e3a(void)
 {
 	switch(*Lp++) {
 	case '>':
@@ -917,7 +906,7 @@ void e4(int a)
 			break;
 	}
 }
-void e5(void a)
+void e5(int a)
 {
 	e6(a);
 	for(; Token;) {
@@ -948,7 +937,7 @@ void e6(int a)
 }
 void e7(int a)
 {
-	register *saveip;
+	int *saveip;
 
 	SKIP;
 	if(*Lp == '?') {
@@ -964,7 +953,7 @@ void e7(int a)
 }
 void e8(int a)
 {
-	register opr;
+	int opr;
 
 	SKIP;
 	while((*Lp == '-' && *(Lp+1) != '-') || *Lp == '!') {
@@ -978,23 +967,24 @@ void e8(int a)
 }
 void e9(int a)
 {
-	long cvbase();
-	register i, j;
+	int i, j;
 	union { double db; int intg[DBLSIZE/INTSIZE]; } dbl;
 	char *cp, *cp2;
-	register builtin = -1;
-	register incrflg = 0;
+	int builtin = -1;
+	int incrflg = 0;
 	char tname[16];
 
 	Token = 0;
 	SKIP;
 	if(*Lp == '#') /* comment */
 		*Lp = '\0';
-	if(EOL)
-		if(a)
+	if(EOL) {
+		if(a) {
 			goto e9err;
-		else
+		} else {
 			goto ret_false;
+        }
+    }
 	if(*Lp == '(') {
 		++Lp;
 		if((i = rlist(')')) > 1) {
@@ -1133,7 +1123,7 @@ void push(int v)
 }
 void cerror(char *s)
 {
-	register i ;
+	int i ;
 	char eline[128];
 
 	if(Expr) {
@@ -1161,11 +1151,11 @@ pskip:
 	if(Lnum)
 		Cerrs++, longjmp(Afterr, 1);
 	else
-		intr();
+		intr(SIGINT);
 }
 int aname(char *np)
 {
-	register i;
+	int i;
 	SKIP;
 	if(!LETTER)
 		return 0;
@@ -1179,7 +1169,7 @@ int aname(char *np)
 }
 int ckname(char *np, char **table)
 {
-	register i;
+	int i;
 
 	for(i = 0; *table; ++i,++table)
 		if(EQL(*table, np))
@@ -1189,10 +1179,10 @@ int ckname(char *np, char **table)
 
 long cvbase(int b, char *s)
 {
-	register n, c;
-	register long ans = 0;
+	int n, c;
+	long ans = 0;
 
-	while(c = *s++) {
+	while((c = *s++)) {
 		if(c >= '0' && c <= '9')
 			n = c - '0';
 		else if(c >= 'a' && c <= 'f')
@@ -1206,9 +1196,9 @@ long cvbase(int b, char *s)
 	return ans;
 }
 
-int cklabel(char *tname, int s)
+int cklabel(char *tname, int *s)
 {
-	register i;
+	int i;
 
 	for(i = 0; i < LABELS; ++i) {
 		if(EQL(tname, Label[i].l_name)) {
@@ -1227,10 +1217,11 @@ int cklabel(char *tname, int s)
 	}
 	cerror("Too many labels");
 }
+
 struct names *lookup(char *namep)
 {
-	register i;
-	register struct names *np;
+	int i;
+	struct names *np;
 
 	for(i = 0; i < LastN; ++i) {
 		np = nextname(i);
@@ -1247,7 +1238,7 @@ struct names *lookup(char *namep)
 
 struct names *nextname(int i)
 {
-	register nn;
+	int nn;
 
 	Namegrps = i / NAMES;
 	nn = i % NAMES;
@@ -1262,9 +1253,9 @@ symerr:
 	return &(Np[Namegrps][nn]);
 }
 
-void rlist(char delim)
+int rlist(char delim)
 {
-	register int args = 0;
+	int args = 0;
 	for(;;) {
 		SKIP;
 		if(*Lp == delim) {
@@ -1304,7 +1295,7 @@ struct htab *htable(int sz)
 struct htitem *htitem(struct htab *h, char *key)
 {
 	register struct htitem *hp;
-	register s, r, q;
+	int s, r, q;
 	int first;
 
 	for(s = r = 0; *key; ++s)
@@ -1332,15 +1323,15 @@ struct htitem *htitem(struct htab *h, char *key)
 	error("Table overflow");
 }
 
-struct estack *execute(int *instr, string estack *estackp)
+struct estack *execute(int *instr, struct estack *estackp)
 {
 	register struct estack *estack = estackp;
 	register union gen r;
 	register char *s1;
-	register ct;
+	int ct;
 	register char *s2;
 	int x;
-	double (*func)();
+	double (*func)(double);
 	double dbl;
 	char *tstr;
 	int opr;
@@ -1382,7 +1373,21 @@ struct estack *execute(int *instr, string estack *estackp)
 nameck:
 			if(r.np->t==DOUBLE || r.np->t==STRING) {
 				if(*instr==INCR || *instr==DECR) {
-				    MKDOUBLE(r.np);
+#if 1
+                    /*
+                     * if r.np->t == STRING, this will pass r.np,
+                     * which is a (struct names *) to mkdouble(),
+                     * which expects a (struct estack *). I don't
+                     * know how to fix this, so I'm just stopping
+                     * it from happening. pdxjjb 2025
+                     */
+                    if (r.np->t==STRING) {
+                        fprintf(stderr, "internal error: cannot convert string to double\n");
+                        error(" beam me up, Scotty, she's sucking mud again!");
+                    }
+#else
+				    MKDOUBLE(r.np); /* original code, WRONG */
+#endif
 				    r.np->v.d += *instr++==INCR? 1: -1;
 				    r.np->set = ALLOC;
 				}
@@ -1750,9 +1755,8 @@ argerr:						error("Arg");
 				break;
 			case IO: /* open and close */
 				io(args, to_str(estack),
-					((estack+1)->t==DOUBLE?
-						(estack+1)->v.d: 99.9),
-					to_str(estack+1), to_str(estack+2));
+				  ((estack+1)->t==DOUBLE ?  (estack+1)->v.d: 99.9),
+                  to_str(estack+1), to_str(estack+2));
 				break;
 			case EVAL:
 				Expr = *instr == INTERROGATE;
@@ -1764,9 +1768,16 @@ argerr:						error("Arg");
 				Expr = 0;
 				break;
 			case ACCESS:
+                /*
+                 * This calls the function double access(string, int).
+                 * This function isn't defined anywhere, and it's not
+                 * a system call because it apparently returns double
+                 * (for assignment to v.d), so ... ? pdxjjb 2025
 				estack->v.d = access(to_str(estack),
 					to_int(estack+1))==0? 1: 0;
 				estack->t = DOUBLE;
+                 */
+                error(" internal error: what is 'access'? ... punt ...");
 				break;
 			case FTYPE:
 				if(stat(to_str(estack), &Statb) == -1) {
@@ -1965,7 +1976,7 @@ set:
 	goto set;
 }
 
-error(char *s)
+void error(char *s)
 {
 	if(Expr) {
 		Expr = 0;
@@ -1975,7 +1986,7 @@ error(char *s)
 	if(Lnum)
 		fprintf(stderr, " in source line %d", Lnum);
 	fprintf(stderr, "\n");
-	intr();
+	intr(SIGINT);
 }
 
 void prtsubs(char *ps, struct names *np)
@@ -2025,7 +2036,7 @@ char *to_str(struct estack *estack)
 {
 	char *s, *st;
 	static char rv[3][42];
-	static which = 0;
+	static int which = 0;
 
 	st = rv[which = which==2? 0: ++which];
 	if(estack->t == DOUBLE) {
@@ -2068,8 +2079,7 @@ char *salloc(int ct, int t)
 	error("Out of string space");
 }
 
-/*VARARGS2*/
-void io(args, char *ns, double fd, char *flname, char *func)
+void io(int args, char *ns, double fd, char *flname, char *func)
 {
 	FILE *fl;
 	int i;
@@ -2136,7 +2146,7 @@ void clear(void)
 	for(i = 0; i < LastN; ++i) {
 		np = nextname(i);
 		if(np->t==INPUT || np->t==OUTPUT) {
-			io(1, np->u.sname);
+			io(1, np->u.sname, 0.0, 0, 0);
 		} else if(np->t == STRING)
 			free(np->v.sp);
 		np->v.d = 0;
@@ -2148,8 +2158,7 @@ void clear(void)
 	Trace = Namegrps = LastN = Lnum = 0;
 }
 
-int local(tname)
-register char *tname;
+int local(char *tname)
 {
 	int i;
 
@@ -2158,28 +2167,6 @@ register char *tname;
 			return i;
 	}
 	return -1;
-}
-
-prtrace(struct fstack *fs)
-{
-	struct estack *estack;
-	int i;
-
-	printf("%d: ", (int)(fs - Fstack));
-	printf("%.6s(", Label[fs->fname].l_name);
-	estack = fs->estk;
-	for(i = 0; i < fs->callargs; ++i) {
-		if(i)
-			fputs(", ", stdout);
-		printf("%.20s", to_str(estack+i));
-	}
-	fputs(") ", stdout);
-	for(i = fs->dclargs; i < fs->tot_var; ++i) {
-		if(i > fs->dclargs)
-			fputs(", ", stdout);
-		printf("%.20s", to_str(estack+i));
-	}
-	fputs("\n", stdout);
 }
 
 double intpow(double a, int b)
@@ -2238,10 +2225,10 @@ double	yshift = 0.0;
 
 char *Plot = "tplot -TXXXXXXXXXXX";
 
-void graph(void *args, struct estack *estack)
+void graph(int args, struct estack *estack)
 {
-	register fcn;
-	register char *stp;
+	int fcn;
+	char *stp;
 
 	fcn = to_int(estack);
 	if(fcn >= NGRAPH || fcn < 0)
@@ -2282,7 +2269,7 @@ void graph(void *args, struct estack *estack)
 
 void putgr(int n, struct estack *estack)
 {
-	register narg, i;
+	int narg, i;
 	double loc;
 
 	narg = gr[n].nargs;
