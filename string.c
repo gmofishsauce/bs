@@ -1,5 +1,4 @@
 /*	@(#)string.c	1.3	*/
-#include <string.h>
 #include "modern.h"
 
 #define ALLOC 127

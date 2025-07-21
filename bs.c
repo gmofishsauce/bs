@@ -29,6 +29,7 @@
 #include <setjmp.h>
 
 #include "modern.h"
+#include "bs.h"
 
 #define DIGIT isdigit(*Lp)
 #define LETTER isalpha(*Lp)
@@ -310,7 +311,6 @@ void prtrace(struct fstack *fs)
 	struct estack *estack;
 	int i;
 
-	printf("%d: ", (int)(fs - Fstack));
 	printf("%.6s(", Label[fs->fname].l_name);
 	estack = fs->estk;
 	for(i = 0; i < fs->callargs; ++i) {
@@ -2102,7 +2102,7 @@ void io(int args, char *ns, double fd, char *flname, char *func)
 		if(*flname == '!')
 			np->v.io.file = popen(&flname[1], func);
 		else if (fd == 0)
-			np->v.io.file = stdin, *flname = 0;
+			np->v.io.file = stdin /* , *flname = 0 pdxjjb 2025 */ ;
 		else
 			np->v.io.file = fopen(flname, func);
 		if(np->v.io.file == NULL)
@@ -2113,6 +2113,8 @@ accerr:			error("Cannot access file");
 		*func = 'w';
 	case 'w':
 	case 'a':
+        /* io(3, "put", 1.0, "\0", "w"); */
+        /* void io(int args, char *ns, double fd, char *flname, char *func) */
 		if(fd == 1)
 			np->v.io.file = stdout, *flname = 0;
 		else if(fd == 2)
