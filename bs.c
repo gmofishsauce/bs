@@ -207,7 +207,7 @@ struct htab {
 	struct htitem ht_item[1];
 };
 struct fstack {
-	int	*fip;
+	int64_t	*fip;
 	struct	estack *estk, *estkp;
 	char	callargs,
 		tot_var,
@@ -215,7 +215,7 @@ struct fstack {
 		fname;
 } Fstack[F_STACK], *Fstackp = Fstack, *Ftrace = Fstack;
 struct label {
-	int	*l_instr;
+	int64_t	*l_instr;
 	char	l_name[6];
 } Label[LABELS];
 char	Locname[10][6];
@@ -233,10 +233,10 @@ short	State;
 short	Cerrs = 0;
 short	Trace = 0;
 short	Expr = 0;
-int	Instr[INSTRUCTIONS];
-int	Sinstr[256];
-int	*Ip = Instr;
-int	*Oip = 0;
+int64_t	Instr[INSTRUCTIONS];
+int64_t	Sinstr[256];
+int64_t	*Ip = Instr;
+int64_t	*Oip = 0;
 short	Namegrps = 0, LastN = 0;
 short	LastS = 0;
 short	Nest = 0;
@@ -266,7 +266,7 @@ extern int nbra;
 
 union gen {
 	int i;
-	int *ip;
+	int64_t *ip;
 	char *cp;
 	struct names *np;
 	struct estack *esp;
@@ -435,7 +435,7 @@ void statement(void)
 
 void singstat(void )
 {
-	register int* saveip = Ip;
+	register int64_t* saveip = Ip;
 	register int v;
 	register struct estack *ep;
 
@@ -490,8 +490,8 @@ int comp(void)
 {
 	int ns;
 	char *savelp;
-	static int *savefun;
-	static struct { int tp, *loc; } s[20];
+	static int64_t *savefun;
+	static struct { int64_t tp, *loc; } s[20];
 	register int i;
 	register union gen save1, save2, save3;
 	char tname[20];
@@ -516,7 +516,7 @@ elif:
 		SKIP;
 		if(!EOL) {
 			comp();
-			*(s[--Nest].loc) = (int)Ip;
+			*(s[--Nest].loc) = (int64_t)Ip;
 		}
 		break;
 	case ELSE:
@@ -527,7 +527,7 @@ elif:
 		op(JUMP);
 		s[Nest].tp = Rescode[ns];
 		s[Nest++].loc = Ip++;
-		*save1.ip = (int)Ip;
+		*save1.ip = (int64_t)Ip;
 		if(Rescode[ns] == ELIF) {
 			s[Nest].tp = ELIF;
 			goto elif;
@@ -543,7 +543,7 @@ elif:
 fifi:
 		if(s[--Nest].tp != IF && s[Nest].tp != ELSE && s[Nest].tp != ELIF)
 			cerror("Fi: no if");
-		*(s[Nest].loc) = (int)Ip;
+		*(s[Nest].loc) = (int64_t)Ip;
 		if((s[Nest].tp == ELIF || s[Nest-1].tp == ELIF)
 		&& (s[Nest-1].tp == IF || s[Nest-1].tp == ELIF))
 			goto fifi;
@@ -556,7 +556,7 @@ fifi:
 	case GOTO:
 		if(aname(tname)) {
 			op(GOTO);
-			push(cklabel(tname, (int *)0));
+			push(cklabel(tname, (int64_t *)0));
 			break;
 		} else
 			cerror("?");
@@ -609,7 +609,7 @@ fifi:
 				goto forerr;
 			++Lp;
 			expr(0); /* incr */
-			*save2.ip = (int)Ip;
+			*save2.ip = (int64_t)Ip;
 			save2.cp = Lp;
 			Lp = save3.cp; /* do test for real */
 			expr(0);
@@ -627,7 +627,7 @@ forerr:				cerror("For");
 			e9(1);
 			Lp = save3.cp;
 			op(INCR);
-			*save2.ip = (int)Ip; /* fill in jump around init */
+			*save2.ip = (int64_t)Ip; /* fill in jump around init */
 			save3.cp = Lp; /* re-do init */
 			Lp = save1.cp;
 			e9(1);
@@ -650,14 +650,14 @@ next:
 			cerror("Next: no for");
 		save1.ip = s[Nest].loc;
 		op(JUMP); /* jump back to incr & test */
-		*Ip++ = (int)s[--Nest].loc;
-		*save1.ip = (int)Ip; /* fill in jump out of loop */
+		*Ip++ = (int64_t)s[--Nest].loc;
+		*save1.ip = (int64_t)Ip; /* fill in jump out of loop */
 		break;
 	case BREAK:
 		for(i = Nest-1; i>=0; --i)
 			if(s[i].tp == NEXT) {
 				op(BREAK);
-				*Ip++ = (int)s[i].loc;
+				*Ip++ = (int64_t)s[i].loc;
 				break;
 			}
 		if(i < 0)
@@ -667,7 +667,7 @@ brkerr:			cerror("No for");
 		for(i = Nest-1; i>=0; --i)
 			if(s[i].tp == FOR) {
 				op(JUMP);
-				*Ip++ = (int)s[i].loc;
+				*Ip++ = (int64_t)s[i].loc;
 				break;
 			}
 		if(i < 0)
@@ -706,7 +706,7 @@ funerr:			cerror("Func def.");
 	case NUF:
 		op(INTCONS); push(0);
 		op(RETURN);
-		*savefun = (int)Ip;
+		*savefun = (int64_t)Ip;
 		Lnames = 0;
 		break;
 	case DUMP:
@@ -714,12 +714,12 @@ funerr:			cerror("Func def.");
 		if(aname(tname)) {
 			savelp = salloc(sizeof tname + 2, ALLOC);
 			strcpy(savelp, tname);
-			push((int)savelp);
+			push((int64_t)savelp);
 		} else
 			push(0);
 		break;
 	case ONINTR:
-		i = aname(tname)? cklabel(tname, (int *)0): ALLOC;
+		i = aname(tname)? cklabel(tname, (int64_t *)0): ALLOC;
 		op(ONINTR);
 		push(i);
 		break;
@@ -778,9 +778,9 @@ funerr:			cerror("Func def.");
 	return 0;
 }
 
-int expr(int a)
+int expr(int64_t a)
 {
-	int *saveip = Ip;
+	int64_t *saveip = Ip;
 	int namei;
     int subs;
 	int saveop;
@@ -807,7 +807,7 @@ int expr(int a)
 	return saveip != Ip;
 }
 
-void e1(int a)
+void e1(int64_t a)
 {
 	register int i;
 
@@ -819,7 +819,7 @@ void e1(int a)
 	if(i)
 		op(CAT),push(i);
 }
-void e2(int a)
+void e2(int64_t a)
 {
 	register int tp;
 
@@ -839,7 +839,7 @@ void e2(int a)
 			break;
 	}
 }
-void e3(int a)
+void e3(int64_t a)
 {
 	register int i = 0;
 	register int opr;
@@ -890,7 +890,7 @@ int e3a(void)
 	--Lp;
 	return 0;
 }
-void e4(int a)
+void e4(int64_t a)
 {
 	e5(a);
 	for(; Token;) {
@@ -906,7 +906,7 @@ void e4(int a)
 			break;
 	}
 }
-void e5(int a)
+void e5(int64_t a)
 {
 	e6(a);
 	for(; Token;) {
@@ -926,7 +926,7 @@ void e5(int a)
 			break;
 	}
 }
-void e6(int a)
+void e6(int64_t a)
 {
 	e7(a);
 	while(Token && *Lp == '^') {
@@ -935,9 +935,9 @@ void e6(int a)
 		op(EXPO);
 	}
 }
-void e7(int a)
+void e7(int64_t a)
 {
-	int *saveip;
+	int64_t *saveip;
 
 	SKIP;
 	if(*Lp == '?') {
@@ -946,12 +946,12 @@ void e7(int a)
 		saveip = Ip++;
 		e8(1);
 		op(INTERROGATE);
-		*saveip = (int)Ip;
+		*saveip = (int64_t)Ip;
 		return;
 	}
 	e8(a);
 }
-void e8(int a)
+void e8(int64_t a)
 {
 	int opr;
 
@@ -965,7 +965,7 @@ void e8(int a)
 	}
 	e9(a);
 }
-void e9(int a)
+void e9(int64_t a)
 {
 	int i, j;
 	union { double db; int intg[DBLSIZE/INTSIZE]; } dbl;
@@ -1043,7 +1043,7 @@ ret_false:
 		cp = salloc(strlen(cp2), ALLOC);
 		strcpy(cp, cp2);
 		free(cp2);
-		push((int)cp);
+		push((int64_t)cp);
 		++Lp;
 		goto ret;
 	}
@@ -1076,11 +1076,11 @@ argerr:				cerror("Arg. count");
 			if(i != 1)
 				goto argerr;
 			op(LIBRTN);
-			*Ip++ = (int)Libcode[builtin];
+			*Ip++ = (int64_t)Libcode[builtin];
 		} else {
 			op(FUNCCALL);
 			push(i);
-			push(cklabel(tname, (int *)0));
+			push(cklabel(tname, (int64_t *)0));
 		}
 		goto ret;
 	}
@@ -1095,28 +1095,28 @@ argerr:				cerror("Arg. count");
 		push(i);
 		if(local(tname) != -1)
 			cerror("Subscript on local name");
-		push((int)lookup(tname));
+		push((int64_t)lookup(tname));
 	} else {
 		if((i = local(tname)) != -1) {
 			op(LNAME);
 			push(i);
 		} else {
 			op(NAME);
-			push((int)lookup(tname));
+			push((int64_t)lookup(tname));
 		}
 	}
 	if(incrflg)
 		op(incrflg == 1? INCR: DECR);
 	goto ret;
 }
-void op(int a)
+void op(int64_t a)
 {
 	Last_op = a;
 	*Ip++ = a;
 	*Ip = 0;
 }
 
-void push(int v)
+void push(int64_t v)
 {
 	*Ip++ = v;
 	*Ip = 0;
@@ -1196,7 +1196,7 @@ long cvbase(int b, char *s)
 	return ans;
 }
 
-int cklabel(char *tname, int *s)
+int cklabel(char *tname, int64_t *s)
 {
 	int i;
 
@@ -1216,6 +1216,7 @@ int cklabel(char *tname, int *s)
 		}
 	}
 	cerror("Too many labels");
+    return 0; // not reached: cerror longjmps
 }
 
 struct names *lookup(char *namep)
@@ -1247,7 +1248,7 @@ symerr:
 		error("Symbol table overflow");
 	if(!Np[Namegrps]) {
 		Np[Namegrps] = (struct names *)malloc((unsigned)sizeof(struct names)*NAMES);
-		if(!(int)Np[Namegrps])
+		if(!(int64_t)Np[Namegrps])
 			goto symerr;
 	}
 	return &(Np[Namegrps][nn]);
@@ -1290,6 +1291,7 @@ struct htab *htable(int sz)
 		}
 	}
 	error("Table too big");
+    return (struct htab *)0; // not reached (I think)
 }
 
 struct htitem *htitem(struct htab *h, char *key)
@@ -1321,9 +1323,10 @@ struct htitem *htitem(struct htab *h, char *key)
 		r = (r + s) % h->ht_size;
 	} while(r != first);
 	error("Table overflow");
+    return 0; // not reached (I think)
 }
 
-struct estack *execute(int *instr, struct estack *estackp)
+struct estack *execute(int64_t *instr, struct estack *estackp)
 {
 	register struct estack *estack = estackp;
 	register union gen r;
@@ -1545,7 +1548,7 @@ brk:			break;
 				estack = estackp = Intr.e_stackp;
 				Intr.e_stackp = 0;
 				Fstackp = Intr.f_stackp;
-				if((instr = (int *)Intr.fail)==0)
+				if((instr = (int64_t *)Intr.fail)==0)
 					exit(1);
 				break;
 			} else {
@@ -1568,7 +1571,7 @@ brk:			break;
 				estack->v.d = 0;
 				estack->t = DOUBLE;
 				Fstackp = J->f_stackp;
-				instr = (int *)J->fail;
+				instr = (int64_t *)J->fail;
 				--J;
 			} else {
 				J->f_stackp = Fstackp;
@@ -1621,15 +1624,15 @@ ckif:
 			if(r.i)
 				++instr;
 			else
-				instr = (int *)*instr;
+				instr = (int64_t *)*instr;
 			estack = estackp;
 			break;
 		case JUMP:
 		case FUNCDEF: /* jump around func body */
-			instr = (int *)*instr;
+			instr = (int64_t *)*instr;
 			break;
 		case GOTO:
-			instr = (int *)Label[*instr].l_instr;
+			instr = (int64_t *)Label[*instr].l_instr;
 			if(instr == 0)
 				error("No label");
 			break;
@@ -1653,16 +1656,16 @@ ckif:
 			r.fp->callargs = *instr++;
 			r.fp->fip = (instr + 1);
 			r.fp->fname = *instr;
-			instr = (int *)Label[*instr].l_instr;
+			instr = (int64_t *)Label[*instr].l_instr;
 			if(*instr++ != FUNCDEF) {
 				printf("Undefined function ");
 				prtrace(r.fp);
 				printf("Return:  ");
 				Lp = salloc(128, 0);
 				(void)fgets(Lp, 128, Input);
-				Ip = (int *)(tstr = salloc(128, ALLOC));
+				Ip = (int64_t *)(tstr = salloc(128, ALLOC));
 				comp();
-				(void)execute((int *)tstr, estack-1);
+				(void)execute((int64_t *)tstr, estack-1);
 				free(tstr);
 				goto ret;
 			}
@@ -1715,8 +1718,8 @@ retn:
 			goto retn;
 		case BREAK:
 			estack = estackp;
-			instr = (int *)*instr;
-			instr = (int *)*instr;
+			instr = (int64_t *)*instr;
+			instr = (int64_t *)*instr;
 			break;
 		case LIBRTN:
 			func = (double (*)())*instr++;
@@ -1761,9 +1764,9 @@ argerr:						error("Arg");
 			case EVAL:
 				Expr = *instr == INTERROGATE;
 				Lp = to_str(estack);
-				Ip = (int *)(tstr = salloc(512, ALLOC));
+				Ip = (int64_t *)(tstr = salloc(512, ALLOC));
 				comp();
-				(void)execute((int *)tstr, estack-1);
+				(void)execute((int64_t *)tstr, estack-1);
 				free(tstr);
 				Expr = 0;
 				break;
@@ -1870,7 +1873,7 @@ nottab:
 				++Iskey;
 				s1 = to_str(estack+1);
 				r.htbl = (struct htab *)estack->v.htabl;
-				x = (int)htitem(r.htbl, s1);
+				x = (int64_t)htitem(r.htbl, s1);
 				Iskey = 0;
 				estack->t = DOUBLE;
 				estack->v.d = x? 1: 0;
@@ -1914,10 +1917,13 @@ nottab:
 						   to_str(&(r.htbl->ht_item[x].ht_v)));
 					continue;
 				}
+                /* Again, the argument to to_str() makes no sense.
+                 * And it's just a printf, basically debugging code. jjb
 				if(r.np->set==ALLOC) {
 					printf("%.6s=%s\n",
 					 r.np->u.sname, to_str(r.np));
 				}
+                */
 			}
 			break;
 		default:
@@ -1945,7 +1951,7 @@ struct names *getar(struct names *np, int val)
 	register struct names *np1, *np2;
 
 	val = -val;  /* subscripts are stored as complements */
-	if(np1 = np->v.ar_hdr.head) {
+	if ((np1 = np->v.ar_hdr.head)) {
 /* shortcut for equal or +1 subscripts (didn't help)
 		if((np2 = np->v.ar_hdr.lastref)->ar.subscr == val)
 			return np2;
@@ -1957,7 +1963,7 @@ loop:
 			np->v.ar_hdr.lastref = np1;
 			return np1;
 		}
-		if(np2 = np1->u.ar.next ) {
+		if ((np2 = np1->u.ar.next)) {
 			np1 = np2;
 			goto loop;
 		}
@@ -1998,8 +2004,9 @@ void prtsubs(char *ps, struct names *np)
 		*lc = '\0';
 		sprintf(ps, "%s[%d]", ps, -(np->u.ar.subscr));
 		if(np->set == ALLOC)
-			printf("%s=%s\n", ps, to_str(np));
-		else if(np->t == ARRAY)
+            error(" internal error: to_str() again ... punt ...");
+			/*printf("%s=%s\n", ps, to_str(np));*/
+        else if(np->t == ARRAY)
 			prtsubs(ps, np->v.ar_hdr.head);
 		if(!np->u.ar.next)
 			return;
@@ -2025,6 +2032,8 @@ conv:			error("Conversion");
 		estack->t = DOUBLE;
 		return estack->v.d;
 	}
+    error(" internal error: mkdouble(): bad type ... punt ...");
+    return 0.0;
 }
 
 int to_int(struct estack *estack)
@@ -2038,7 +2047,18 @@ char *to_str(struct estack *estack)
 	static char rv[3][42];
 	static int which = 0;
 
-	st = rv[which = which==2? 0: ++which];
+    /* the original line looked like this and draw an unsequenced
+     * modification warning from a modern compiler. I rewrote it
+     * below. I hope it captured the author's intent. jjb
+	st = rv[which = which==2 ? 0 : ++which];
+    */
+    if (which == 2) {
+        which = 0;
+    } else {
+        ++which;
+    }
+    st = rv[which];
+
 	if(estack->t == DOUBLE) {
 		if(Obase == 10)
 			sprintf(st, "%.10f", estack->v.d);
@@ -2065,7 +2085,7 @@ char *salloc(int ct, int t)
 {
 	char *rv;
 
-	if(rv = malloc((unsigned)(ct+1))) {
+	if ((rv = malloc((unsigned)(ct+1)))) {
 		if(t != ALLOC) { /* temp */
 			if(!(++Ti < STRTEMPS))
 				Ti = 0;
@@ -2077,6 +2097,7 @@ char *salloc(int ct, int t)
 		return rv;
 	}
 	error("Out of string space");
+    return 0;
 }
 
 void io(int args, char *ns, double fd, char *flname, char *func)
@@ -2243,11 +2264,18 @@ void graph(int args, struct estack *estack)
 
 	Gio++;
 	if(fcn == 0) {		/* pipe output through plot(I) */
+        /*
+         * The argument to to_str() is completely the wrong type.
+         * I don't know what to do about this and it doesn't seem
+         * important (I don't think plot(1) is the same program
+         * it was around 1980 when this code was written.) jjb
 		Plot[7] = '\0';
 		if(strlen(stp = to_str(estack)) >  10)
 			error("graph: Bad dest.");
 		strcat(Plot, stp);
 		grio();
+        */
+        error(" internal error: original code: to_str()? plot(1)?  ... punt ...");
 		return;
 	}
 	if(gr[fcn].code)

@@ -1,0 +1,2 @@
+#!/bin/sh
+cc -o bs *.c 2>&1 | cat > warnings
