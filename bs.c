@@ -2123,7 +2123,7 @@ void io(int args, char *ns, double fd, char *flname, char *func)
 		if(*flname == '!')
 			np->v.io.file = popen(&flname[1], func);
 		else if (fd == 0)
-			np->v.io.file = stdin /* , *flname = 0 pdxjjb 2025 */ ;
+			np->v.io.file = stdin; /* , *flname = 0 pdxjjb 2025 */
 		else
 			np->v.io.file = fopen(flname, func);
 		if(np->v.io.file == NULL)
@@ -2137,9 +2137,9 @@ accerr:			error("Cannot access file");
         /* io(3, "put", 1.0, "\0", "w"); */
         /* void io(int args, char *ns, double fd, char *flname, char *func) */
 		if(fd == 1)
-			np->v.io.file = stdout, *flname = 0;
+			np->v.io.file = stdout; /* , *flname = 0; removed jjb */
 		else if(fd == 2)
-			np->v.io.file = stderr, *flname = 0;
+			np->v.io.file = stderr; /* , *flname = 0; removed jjb */
 		else if(*flname == '!')
 			np->v.io.file = popen(&flname[1], func);
 		else
