@@ -482,7 +482,6 @@ again:
 			statement();
 		else
 			singstat();
-        DBG(stderr, "processed line %d\n", line_num);
 	}
 	Filename = 0;
 	if(Input != stdin) {
@@ -878,7 +877,7 @@ funerr:			cerror("Func def.");
 int expr(int64_t a)
 {
 	int64_t *saveip = Ip;
-	int namei;
+	int64_t namei;
     int subs;
 	int saveop;
 
@@ -1424,6 +1423,18 @@ struct htitem *htitem(struct htab *h, char *key)
     return 0; // not reached (I think)
 }
 
+#include <sys/stat.h>
+
+/* substitute for obsolete Unix v6 syscall "access(file, mode)"
+ * where "mode" is the usual 9-bit "ogu" (MSB to LSB) pattern. */
+int access(char* file, int mode) {
+    struct stat file_info;
+    if (stat(file, &file_info) == -1) {
+        return -1;
+    }
+    return (file_info.st_mode&mode) == mode ? 0 : -1;
+}
+
 struct estack *execute(int64_t *instr, struct estack *estackp)
 {
 	register struct estack *estack = estackp;
@@ -1856,16 +1867,8 @@ argerr:						error("Arg");
 				Expr = 0;
 				break;
 			case ACCESS:
-                /*
-                 * This calls the function double access(string, int).
-                 * This function isn't defined anywhere, and it's not
-                 * a system call because it apparently returns double
-                 * (for assignment to v.d), so ... ? pdxjjb 2025
-				estack->v.d = access(to_str(estack),
-					to_int(estack+1))==0? 1: 0;
+				estack->v.d = access(to_str(estack), to_int(estack+1))==0? 1: 0;
 				estack->t = DOUBLE;
-                 */
-                error(" internal error: what is 'access'? ... punt ...");
 				break;
 			case FTYPE:
 				if(stat(to_str(estack), &Statb) == -1) {

@@ -11,9 +11,9 @@ nuf
 testall:
 if !func(12) put="func"
 # Test operators
-if 1+1 != 2 put="add"
+if 1+1 != 2 put="add 1+1"
 if  13%1 put="rem"
-if 123456+1 != 123457 put="add"
+if 123456+1 != 123457 put="add 123456+1"
 if 99999.999-99999.999 put ="subt"
 if (88888*88888)-(88888*88888) put="mult"
 if ((6+9)/3)!=5 put="presc"
