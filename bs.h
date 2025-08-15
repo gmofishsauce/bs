@@ -1,7 +1,7 @@
 
 /* bs.c */
 #define DBLSIZE	sizeof (double)
-#define INTSIZE	sizeof (int)
+#define INTSIZE	sizeof (int64_t)
 
 union value {
 	double	d;

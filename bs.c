@@ -1,5 +1,14 @@
 /*	@(#)bs.c	1.3	*/
 /*	3.0 SID #	1.3	*/
+/*
+ * Heavily edited summer 2025 pdxjjb@gmail.com
+ * The code stores integer pointers in integers
+ * The only long term solution was convert all this to int64.
+ * Compile: cc -o bs *.c
+ * Add -g and -DDEBUG for full debugging.
+ */
+
+/* ORIGINAL COMMENT: */
 /* To compile: cc -i -O atof.c bs.c string.c -lm
 
 	BS is a compiler/interpreter
@@ -152,6 +161,91 @@
 #define MKDOUBLE(x) if((x)->t!=DOUBLE)mkdouble(x)
 #define INTBITS (INTSIZE*8-2)
 
+#ifdef DEBUG
+#define DBG fprintf
+
+char *tokToName[] = {
+"EOL", /*0*/
+"ASG", /*1*/
+"LASG", /*2*/
+"ASGSUBS", /*3*/
+"AND", /*4*/
+"OR", /*5*/
+"EQ", /*6*/
+"NEQ", /*7*/
+"GT", /*8*/
+"LT", /*9*/
+"GEQ", /*10*/
+"LEQ", /*11*/
+"ADD", /*12*/
+"SUBT", /*13*/
+"MULT", /*14*/
+"DIV", /*15*/
+"EXPO", /*16*/
+"MOD", /*17*/
+"CAT", /*18*/
+"NOT", /*19*/
+"NEG", /*20*/
+"LINE", /*21*/
+"DUMP", /*22*/
+"TRACE", /*23*/
+"ONINTR", /*24*/
+"EXTR", /*25*/
+"DBLCONS", /*26*/
+"INTCONS", /*27*/
+"STRING", /*28*/
+"NAME", /*29*/
+"SUBSCR", /*30*/
+"LNAME", /*31*/
+"FUNCCALL", /*32*/
+"FUNCDEF", /*33*/
+"BUILTIN", /*34*/
+"BREAK", /*35*/
+"GOTO", /*36*/
+"JUMP", /*37*/
+"IF", /*38*/
+"EXIT", /*39*/
+"RETURN", /*40*/
+"FRETURN", /*41*/
+"INTSET", /*42*/
+"INTERROGATE", /*43*/
+"SELECT", /*44*/
+"LIBRTN", /*45*/
+"IBASE", /*46*/
+"OBASE", /*47*/
+"COMPILE", /*48*/
+"EXECUTE", /*49*/
+"FOR", /*50*/
+"RUN", /*51*/
+"WHILE", /*52*/
+"STOP", /*53*/
+"CLEAR", /*54*/
+"NEXT", /*55*/
+"ELSE", /*56*/
+"NUF", /*57*/
+"DECR", /*58*/
+"INCLUDE", /*59*/
+"INCR", /*60*/
+"ELIF", /*61*/
+"FI", /*62*/
+"CONTINUE", /*63*/
+"EDIT", /*64*/
+};
+
+#define NTOKPRINT (sizeof(tokToName)/sizeof(char*))
+
+void dbgtok64(int64_t i) {
+    if (i < 0 || i >= NTOKPRINT) {
+        fprintf(stderr, "out of range token: %lld", i);
+    } else {
+        fprintf(stderr, "%s", tokToName[i]); 
+    }
+}
+void dbgtok(int i) {
+    dbgtok64((int64_t)i);
+}
+#endif // DEBUG
+
 char *Resnames[] = {
 	"if", "else", "elif", "fi", "goto",
 	"exit", "q", "return", "freturn", "for", "next", "while",
@@ -265,7 +359,7 @@ extern	char *Mstring[];
 extern int nbra;
 
 union gen {
-	int i;
+	int64_t i;
 	int64_t *ip;
 	char *cp;
 	struct names *np;
@@ -340,6 +434,7 @@ void sigpipe(int num)
 int main(int argc, char** argv)
 {
 	int lc;
+    int line_num = 0;
 
 	(void)setjmp(Remain);
 	Ip = Instr;
@@ -375,6 +470,7 @@ again:
 	lc = 0;
 	(void)setjmp(Afterr);
 	while(fgets(&Line[lc], 512-lc, Input) != NULL) {
+        line_num++;
 		lc = strlen(Line) - 2;
 		if(Line[lc] == '\\') {
 			++Cont;
@@ -386,6 +482,7 @@ again:
 			statement();
 		else
 			singstat();
+        DBG(stderr, "processed line %d\n", line_num);
 	}
 	Filename = 0;
 	if(Input != stdin) {
@@ -1007,8 +1104,9 @@ ret_false:
 		dbl.db = Ibase==10? atof(Lp): cvbase(Ibase, Lp);
 		if(Lp != Atof) /* atof succeeded */ {
 			Lp = Atof;
-			if(dbl.db > -(1<<INTBITS) && dbl.db < (1<<INTBITS)
-			&& ((int)dbl.db == dbl.db)) { /* small int constant */
+            /* pdxjjb 2025 modified because int <=> int64 here */
+			if (/* dbl.db > -(1<<INTBITS) && dbl.db < (1<<INTBITS) && */ ((int)dbl.db == dbl.db)) {
+                /* small int constant */
 				op(INTCONS);
 				push((int)dbl.db);
 				goto ret;
@@ -1346,7 +1444,8 @@ struct estack *execute(int64_t *instr, struct estack *estackp)
 	if(Lnames || Nest)
 		error("Open function, if, or for");
 	for(;;) {
-		switch(opr = *instr++) {
+		opr = *instr++;
+		switch(opr) {
 		case 0: /* end-of-instr */
 			Last = *estack;
 			return estack;
@@ -1376,21 +1475,7 @@ struct estack *execute(int64_t *instr, struct estack *estackp)
 nameck:
 			if(r.np->t==DOUBLE || r.np->t==STRING) {
 				if(*instr==INCR || *instr==DECR) {
-#if 1
-                    /*
-                     * if r.np->t == STRING, this will pass r.np,
-                     * which is a (struct names *) to mkdouble(),
-                     * which expects a (struct estack *). I don't
-                     * know how to fix this, so I'm just stopping
-                     * it from happening. pdxjjb 2025
-                     */
-                    if (r.np->t==STRING) {
-                        fprintf(stderr, "internal error: cannot convert string to double\n");
-                        error(" beam me up, Scotty, she's sucking mud again!");
-                    }
-#else
-				    MKDOUBLE(r.np); /* original code, WRONG */
-#endif
+				    MKDOUBLE((struct estack*)r.np);
 				    r.np->v.d += *instr++==INCR? 1: -1;
 				    r.np->set = ALLOC;
 				}
