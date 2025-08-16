@@ -1064,7 +1064,7 @@ void e8(int64_t a)
 void e9(int64_t a)
 {
 	int i, j;
-	union { double db; int intg[DBLSIZE/INTSIZE]; } dbl;
+	union { double db; int64_t intg[DBLSIZE/INTSIZE]; } dbl;
 	char *cp, *cp2;
 	int builtin = -1;
 	int incrflg = 0;
@@ -1103,16 +1103,22 @@ ret_false:
 		dbl.db = Ibase==10? atof(Lp): cvbase(Ibase, Lp);
 		if(Lp != Atof) /* atof succeeded */ {
 			Lp = Atof;
-            /* pdxjjb 2025 modified because int <=> int64 here */
-			if (/* dbl.db > -(1<<INTBITS) && dbl.db < (1<<INTBITS) && */ ((int)dbl.db == dbl.db)) {
-                /* small int constant */
+            /* In the port to modern C, this code caused
+             * many issues. I eventually made an edit in
+             * atof.c and simplified this code to suit 64-
+             * bit integers. The modified atof.c probably
+             * has issues with values outside +- 2^50.
+             * pdxjjb 2025
+             */
+            if ((int64_t)dbl.db == dbl.db) {
 				op(INTCONS);
-				push((int)dbl.db);
+				push((int64_t)dbl.db);
 				goto ret;
 			}
 			op(DBLCONS);
-			for(i = 0; i < (DBLSIZE/INTSIZE); ++i)
+			for(i = 0; i < (DBLSIZE/INTSIZE); ++i) {
 				push(dbl.intg[i]);
+            }
 			goto ret;
 		}
 	}

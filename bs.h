@@ -11,7 +11,7 @@ union value {
 		char	ffunc, f_or_p;
 	} io;
 	char	ch[DBLSIZE];
-	int	intg[DBLSIZE/INTSIZE];
+	int64_t	intg[DBLSIZE/INTSIZE];
 	struct {
 		struct names	*head, *lastref;
 	} ar_hdr;

@@ -7,8 +7,18 @@
  */
 
 #include <ctype.h>
-#include "values.h"
 #include "modern.h" /* pdxjjb 2025 */
+
+/* The original code included a file called values.h
+ * that was so old it still contained a definition for
+ * 9-bit bytes under an #ifdef gcos.  ;-) I removed
+ * the file and I'm defining this symbol which was
+ * the only one used from the old include. It was
+ * defined as MAXPOWTWO as DMAXPOWTWO "for backward
+ * compatibility." And "DMAXPOWTWO - The largest
+ * power of two exactly representable as a double."
+ */
+#define MAXPOWTWO ((double)(1LL<<50))
 
 extern double ldexp();
 
