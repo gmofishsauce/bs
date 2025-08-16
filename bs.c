@@ -292,6 +292,19 @@ names_t *Np[NAMEGRPS];
 
 estack_t Estack[E_STACK];
 
+#ifdef DEBUG
+void esf(int fr) {
+    DBG(stderr, "Estack[%d]->{t=%d, val=0x%llx}\n", fr, Estack[fr].t, Estack[fr].v.intg[0]);
+}
+
+void dump_estack(void) {
+    int i;
+    for (i = 0; i < 5; ++i) {
+        esf(i);
+    }
+}
+#endif
+
 struct htitem {
 	char *ht_key;
 	struct estack ht_v;
@@ -878,8 +891,8 @@ int expr(int64_t a)
 {
 	int64_t *saveip = Ip;
 	int64_t namei;
-    int subs;
-	int saveop;
+    int64_t subs;
+	int64_t saveop;
 
 	e1(a);
 	if(*Lp == '=') {
@@ -917,7 +930,7 @@ void e1(int64_t a)
 }
 void e2(int64_t a)
 {
-	register int tp;
+	register int64_t tp;
 
 	e3(a);
 	for(tp=0; Token;tp=0) {
@@ -937,8 +950,8 @@ void e2(int64_t a)
 }
 void e3(int64_t a)
 {
-	register int i = 0;
-	register int opr;
+	register int64_t i = 0;
+	register int64_t opr;
 
 	e4(a);
 	if(Token && (opr = e3a())) {
@@ -1049,7 +1062,7 @@ void e7(int64_t a)
 }
 void e8(int64_t a)
 {
-	int opr;
+	int64_t opr;
 
 	SKIP;
 	while((*Lp == '-' && *(Lp+1) != '-') || *Lp == '!') {
@@ -1063,7 +1076,7 @@ void e8(int64_t a)
 }
 void e9(int64_t a)
 {
-	int i, j;
+	int64_t i, j;
 	union { double db; int64_t intg[DBLSIZE/INTSIZE]; } dbl;
 	char *cp, *cp2;
 	int builtin = -1;
@@ -1432,7 +1445,7 @@ struct htitem *htitem(struct htab *h, char *key)
 #include <sys/stat.h>
 
 /* substitute for obsolete Unix v6 syscall "access(file, mode)"
- * where "mode" is the usual 9-bit "ogu" (MSB to LSB) pattern. */
+ * where "mode" is the usual 9-bit "ugo" pattern. */
 int access(char* file, int mode) {
     struct stat file_info;
     if (stat(file, &file_info) == -1) {
@@ -1924,8 +1937,22 @@ argerr:						error("Arg");
 				estack->t = DOUBLE;
 				break;
 			case FORMAT:
-				sprintf((tstr=salloc(64,0)), to_str(estack),
-					*(estack+1));
+                /* pdxjjb 2025: FORMAT failed because the argument to be
+                 * formatted was passed as "*(estack+1)". It's not clear
+                 * what this did in "old" C - probably passed the struct
+                 * by value as a compiler extension and took advantage
+                 * of its layout details in memory. But this just fails
+                 * completely in modern C. It looks like estack->t (the
+                 * type) can be DOUBLE, STRING, INPUT, OUTPUT, ARRAY, or
+                 * TABLE. We just support the first two.
+                 */
+                if ((estack+1)->t == STRING) {
+                    sprintf((tstr=salloc(64,0)), to_str(estack), (*(estack+1)).v.sp);
+                } else if ((estack+1)->t == DOUBLE) {
+                    sprintf((tstr=salloc(64,0)), to_str(estack), (*(estack+1)).v.d);
+                } else {
+                    sprintf((tstr=salloc(64,0)), "%d", (*(estack+1)).t);
+                }
 				estack->v.sp = tstr;
 				estack->t = STRING;
 				break;
@@ -2143,7 +2170,7 @@ char *to_str(struct estack *estack)
 
     /* the original line looked like this and draw an unsequenced
      * modification warning from a modern compiler. I rewrote it
-     * below. I hope it captured the author's intent. jjb
+     * below. I hope it captured the author's intent. pdxjjb 2025.
 	st = rv[which = which==2 ? 0 : ++which];
     */
     if (which == 2) {
@@ -2171,8 +2198,9 @@ char *to_str(struct estack *estack)
 		return st;
 	} else if(estack->t==INPUT || estack->t==OUTPUT)
 		return "I/O";
-	else
+	else {
 		return estack->v.sp;
+    }
 }
 
 char *salloc(int ct, int t)
