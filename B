@@ -1,2 +1,2 @@
 #!/bin/sh
-cc -DDEBUG -g -o bs *.c
+cc -DDEBUG -g -o bs *.c -lm
