@@ -2057,7 +2057,7 @@ nottab:
 int true(struct estack *estack)
 {
 	if(estack->t == STRING)
-		if(estack->v.sp[0])
+		if(estack->v.sp != NULL && estack->v.sp[0])
 			return 1;
 		else
 			return 0;
